@@ -26,12 +26,15 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.util.AttributeKey;
 import io.netty.util.CharsetUtil;
+import io.netty.util.internal.PlatformDependent;
+
 /**
  * ClassName:MyWebSocketServerHandler Function: TODO ADD FUNCTION.
  *
  * @author hxy
  */
 public class MyWebSocketServerHandler extends SimpleChannelInboundHandler<Object> {
+
     private static final Logger logger = Logger.getLogger(WebSocketServerHandshaker.class.getName());
     private WebSocketServerHandshaker handshaker;
     /**
@@ -62,37 +65,6 @@ public class MyWebSocketServerHandler extends SimpleChannelInboundHandler<Object
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
         ctx.flush();
-    }
-    private void handlerWebSocketFrame(ChannelHandlerContext ctx, WebSocketFrame frame) {
-// 判断是否关闭链路的指令
-        if (frame instanceof CloseWebSocketFrame) {
-            System.out.println(1);
-            handshaker.close(ctx.channel(), (CloseWebSocketFrame) frame.retain());
-            return;
-        }
-// 判断是否ping消息
-        if (frame instanceof PingWebSocketFrame) {
-            logger.info("receive ping");
-            ctx.channel().write(new PongWebSocketFrame(frame.content().retain()));
-            return;
-        }
-// 本例程仅支持文本消息，不支持二进制消息
-        if (!(frame instanceof TextWebSocketFrame)) {
-            System.out.println("本例程仅支持文本消息，不支持二进制消息");
-            throw new UnsupportedOperationException(
-                    String.format("%s frame types not supported", frame.getClass().getName()));
-        }
-// 返回应答消息
-        String request = ((TextWebSocketFrame) frame).text();
-        System.out.println("服务端收到：" + request);
-        if (logger.isLoggable(Level.FINE)) {
-            logger.fine(String.format("%s received %s", ctx.channel(), request));
-        }
-        TextWebSocketFrame tws = new TextWebSocketFrame(new Date().toString() + ctx.channel().id() + "：" + request);
-// 群发
-        Global.group.writeAndFlush(tws);
-// 返回【谁发的发给谁】
-// ctx.channel().writeAndFlush(tws);
     }
     private void handlerWebSocketFrame2(ChannelHandlerContext ctx, WebSocketFrame frame) {
 // 判断是否关闭链路的指令
@@ -132,17 +104,30 @@ public class MyWebSocketServerHandler extends SimpleChannelInboundHandler<Object
             return;
         }
 //获取url后置参数
-        HttpMethod method=req.getMethod();
-        String uri=req.getUri();
+        HttpMethod method=req.method();
+        String uri=req.uri();
         QueryStringDecoder queryStringDecoder = new QueryStringDecoder(uri);
+
         Map<String, List<String>> parameters = queryStringDecoder.parameters();
-        System.out.println(parameters.get("request").get(0));
-        if(method==HttpMethod.GET&&"/webssss".equals(uri)){
-//....处理
-            ctx.attr(AttributeKey.valueOf("type")).set("anzhuo");
-        }else if(method==HttpMethod.GET&&"/websocket".equals(uri)){
-//...处理
-            ctx.attr(AttributeKey.valueOf("type")).set("live");
+        String path = queryStringDecoder.path();
+        System.out.println("method:" + method + ", url=" + uri + "," + queryStringDecoder.path());
+
+        if(method==HttpMethod.GET&&"/push".equals(path)){
+            String clientId = parameters.get("clientId").get(0);
+            String message = parameters.get("message").get(0);
+            ChannelHandlerContext context = Global.map.get(clientId);
+            if(context!=null){
+                TextWebSocketFrame tws = new TextWebSocketFrame(new Date().toString() + ctx.channel().id() + "：" + message);
+                context.writeAndFlush(tws);
+                System.out.println(".. write" + message);
+            }else{
+                System.out.println("id not found " + clientId);
+            }
+
+        }else if(method==HttpMethod.GET&&"/websocket".equals(path)){
+            String clientId = parameters.get("clientId").get(0);
+            Global.map.put(clientId,ctx);
+            System.out.println(".. put " + clientId);
         }
 // 构造握手响应返回，本机测试
         WebSocketServerHandshakerFactory wsFactory = new WebSocketServerHandshakerFactory(
@@ -184,12 +169,9 @@ public class MyWebSocketServerHandler extends SimpleChannelInboundHandler<Object
             handleHttpRequest(ctx, ((FullHttpRequest) msg));
 // WebSocket接入
         } else if (msg instanceof WebSocketFrame) {
-            System.out.println(handshaker.uri());
-            if("anzhuo".equals(ctx.attr(AttributeKey.valueOf("type")).get())){
-                handlerWebSocketFrame(ctx, (WebSocketFrame) msg);
-            }else{
-                handlerWebSocketFrame2(ctx, (WebSocketFrame) msg);
-            }
+
+           handlerWebSocketFrame2(ctx, (WebSocketFrame) msg);
+
         }
     }
 }

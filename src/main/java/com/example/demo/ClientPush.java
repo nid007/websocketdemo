@@ -1,16 +1,15 @@
 package com.example.demo;
 
 import okhttp3.*;
-import okhttp3.internal.ws.RealWebSocket;
 import okio.ByteString;
 
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 
-public class Client {
+public class ClientPush {
     public static void main(String[] args){
-        new Client().run();
+        new ClientPush().run();
     }
     WebSocket mSocket;
     public void run(){
@@ -21,12 +20,11 @@ public class Client {
                 .writeTimeout(3, TimeUnit.SECONDS)//设置写的超时时间
 
                 .connectTimeout(3, TimeUnit.SECONDS)//设置连接超时时间
-                .pingInterval(30,TimeUnit.SECONDS)
                 .build();
 
 
 
-        Request request = new Request.Builder().url("ws://127.0.0.1:7397/websocket?clientId=123").build();
+        Request request = new Request.Builder().url("ws://127.0.0.1:7397/push?clientId=123&message=hello ooo 66666").build();
 
         EchoWebSocketListener socketListener = new EchoWebSocketListener();
 
